@@ -7,6 +7,7 @@
 - `models/`: esquemas de Mongoose.
 - `middlewares/`: manejo centralizado de errores (`error.middleware.js`).
 - `config/`: configuración y conexión a MongoDB.
+- `utils/`: funciones puras de dominio (validación de pedido, cálculo de total y transición de estados), sin acceso a datos ni a `req`/`res`.
 
 ## Validación y reglas de dominio
 - Validar y normalizar (`trim`) los datos de entrada antes de guardar. Nunca confiar en el frontend.
