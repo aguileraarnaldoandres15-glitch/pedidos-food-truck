@@ -1,13 +1,13 @@
-import { describe, it, expect, beforeAll, afterEach, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import mongoose from 'mongoose';
 import app from '../app.js';
 import { Order } from '../models/order.model.js';
+import * as orderService from '../services/order.service.js';
 import { calculateTotal } from '../utils/orderTotal.js';
 import { connectMemoryDb, clearMemoryDb, disconnectMemoryDb } from '../../test/memoryDb.js';
 
 // Tests de integración con supertest sobre `app` y una base de datos aislada en memoria.
-// FOOD-05 sigue pendiente y se implementa junto con el manejo uniforme de errores.
 
 // La primera ejecución puede descargar el binario de MongoDB, por eso el timeout es mayor.
 beforeAll(connectMemoryDb, 120_000);
@@ -404,13 +404,56 @@ describe('GET /api/pedidos', () => {
 });
 
 describe('Formato uniforme de respuestas y errores', () => {
+  // Restaura los spies aunque una aserción falle, para no afectar a otros tests.
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   describe('FOOD-05 CA1: contrato { data } / { error: { code, message } }', () => {
-    it.todo('las respuestas exitosas tienen solo la clave data');
-    it.todo('responde 404 NOT_FOUND con formato { error } para una ruta inexistente');
-    it.todo('responde 400 con formato { error } y sin stack ante un JSON malformado');
+    it('las respuestas exitosas tienen solo la clave data', async () => {
+      await insertOrder();
+
+      const response = await getOrders();
+
+      expect(response.status).toBe(200);
+      expect(response.headers['content-type']).toMatch(/application\/json/);
+      expect(Object.keys(response.body)).toEqual(['data']);
+      expect(Array.isArray(response.body.data)).toBe(true);
+    });
+
+    it('responde 404 NOT_FOUND con formato { error } para una ruta inexistente', async () => {
+      const response = await request(app).get('/api/xyz');
+
+      expect(response.headers['content-type']).toMatch(/application\/json/);
+      expectErrorResponse(response, 404, 'NOT_FOUND');
+    });
+
+    it('responde 400 con formato { error } y sin stack ante un JSON malformado', async () => {
+      const response = await request(app)
+        .post('/api/pedidos')
+        .set('Content-Type', 'application/json')
+        .send('{"cliente":');
+
+      expectErrorResponse(response, 400, 'VALIDATION_ERROR');
+      expect(response.body.error.message).not.toMatch(/Unexpected|JSON at position|SyntaxError/);
+      expect(await Order.countDocuments()).toBe(0);
+    });
   });
 
   describe('FOOD-05 CA2: errores inesperados', () => {
-    it.todo('responde 500 INTERNAL_ERROR con mensaje genérico, sin stack ni detalles internos, cuando el service lanza');
+    it('responde 500 INTERNAL_ERROR con mensaje genérico, sin stack ni detalles internos, cuando el service lanza', async () => {
+      vi.spyOn(orderService, 'listOrders').mockRejectedValue(new Error('detalle interno: mongodb://secreto'));
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const response = await getOrders();
+
+      expectErrorResponse(response, 500, 'INTERNAL_ERROR');
+      expect(response.body.error).not.toHaveProperty('stack');
+      expect(JSON.stringify(response.body)).not.toMatch(/secreto|mongodb|detalle interno/);
+
+      // El log del servidor tampoco debe incluir el mensaje interno del error.
+      expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+      expect(consoleErrorSpy.mock.calls[0].join(' ')).not.toMatch(/secreto|mongodb|detalle interno/);
+    });
   });
 });

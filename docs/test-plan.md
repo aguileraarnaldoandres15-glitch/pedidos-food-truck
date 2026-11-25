@@ -4,7 +4,7 @@ Casos de prueba derivados de los criterios de aceptación de las historias `FOOD
 
 **Tipos:** U = unitario · I = integración backend · C = componente frontend · M = manual / E2E
 
-**Estado actual:** los casos U están implementados y en verde. Los 8 casos I de `FOOD-01`, los 4 casos I de `FOOD-02`, los 8 casos I de `FOOD-03` y los 3 casos I de `FOOD-04` están implementados y en verde sobre la base de datos en memoria. Los casos I de `FOOD-05` y los casos C (incluidos los de `FOOD-02`, `FOOD-03` y `FOOD-04`) siguen escritos como `it.todo(...)` y se completan al implementar cada historia.
+**Estado actual:** los casos U están implementados y en verde. Los 8 casos I de `FOOD-01`, los 4 casos I de `FOOD-02`, los 8 casos I de `FOOD-03`, los 3 casos I de `FOOD-04` y los 4 casos I de `FOOD-05` están implementados y en verde sobre la base de datos en memoria; el backend no tiene `it.todo` pendientes. Los casos C (incluidos los de `FOOD-02`, `FOOD-03`, `FOOD-04` y `FOOD-05`) siguen escritos como `it.todo(...)` y se completan al implementar la interfaz.
 
 ## Decisiones de diseño fijadas por los tests
 
@@ -15,6 +15,7 @@ Casos de prueba derivados de los criterios de aceptación de las historias `FOOD
 | Listado completo | `GET /api/pedidos`, ordenado por `fecha` descendente (más reciente primero) |
 | Avanzar estado | `PATCH /api/pedidos/:id/estado` con body `{ "estado": "<destino>" }` |
 | Códigos de error | `VALIDATION_ERROR`, `INVALID_ID`, `INVALID_TRANSITION`, `NOT_FOUND`, `INTERNAL_ERROR` |
+| Rutas inexistentes / JSON malformado | Ruta sin match → `404 NOT_FOUND`. Body JSON malformado → `400 VALIDATION_ERROR` con mensaje genérico, sin detalles del parser. Error inesperado → `500 INTERNAL_ERROR` con mensaje genérico, sin `stack`. |
 | Salida de los validadores | `{ isValid, errors, data }`. `errors` es un objeto por campo (`pedido`, `cliente`, `items`, `items[i]`, `items[i].nombre`, `items[i].cantidad`, `items[i].precioUnitario`) con mensajes en español. `data` es el pedido normalizado (`trim`) sin `total`, `estado` ni `fecha`, o `null` si es inválido. |
 | Entrada no objeto | `null`, `undefined`, string, número, booleano o array devuelven `isValid: false` con error en `pedido`, sin lanzar excepciones. |
 | Total | Suma de `cantidad × precioUnitario` redondeada a 2 decimales |
@@ -27,7 +28,7 @@ Casos de prueba derivados de los criterios de aceptación de las historias `FOOD
 | `backend/src/utils/orderValidation.test.js` | U | `validateOrder` |
 | `backend/src/utils/orderTotal.test.js` | U | `calculateTotal` |
 | `backend/src/utils/orderStatus.test.js` | U | `ORDER_STATUSES`, `getNextStatus`, `validateTransition` |
-| `backend/src/routes/orders.routes.test.js` | I (`FOOD-01` a `FOOD-04` implementados; `FOOD-05` `todo`) | endpoints de pedidos y formato de errores |
+| `backend/src/routes/orders.routes.test.js` | I (`FOOD-01` a `FOOD-05` implementados) | endpoints de pedidos y formato de errores |
 | `frontend/src/utils/orderFormValidation.test.js` | U | `validateOrderForm` |
 | `frontend/src/components/OrderForm.test.jsx` | C (`todo`) | formulario de pedido |
 | `frontend/src/components/OrderList.test.jsx` | C (`todo`) | detalle, estado y botón avanzar |
@@ -145,7 +146,7 @@ Casos de prueba derivados de los criterios de aceptación de las historias `FOOD
 | criterio | caso | entrada | resultado esperado | tipo |
 |---|---|---|---|---|
 | CA1 | Ruta inexistente | `GET /api/xyz` | `404` con `{error:{code:"NOT_FOUND", message}}` | I |
-| CA1 | JSON malformado | body `"{cliente:"` | `400` con formato `{error}` y sin stack | I |
+| CA1 | JSON malformado | body `{"cliente":` | `400` con formato `{error}` y sin stack | I |
 | CA1 | Éxito con `{data}` | `GET /api/pedidos` | el body tiene solo la clave `data` | I |
 | CA2 | Error inesperado | el service lanza (`vi.spyOn`) | `500 INTERNAL_ERROR`, mensaje genérico, sin `stack` ni detalles internos | I |
 | CA3 | Validación en el front: válido | `{cliente:"Ana", items:[{nombre:"Pancho", cantidad:"2", precioUnitario:"1500"}]}` | `isValid: true`, `data` con números convertidos | U |
