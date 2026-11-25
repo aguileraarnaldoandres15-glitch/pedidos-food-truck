@@ -31,6 +31,12 @@ export async function listPendingOrders() {
     .lean();
 }
 
+// Historial completo (todos los estados), del más reciente al más antiguo.
+// El `_id` desempata pedidos con la misma fecha para que el orden sea estable.
+export async function listOrders() {
+  return Order.find().sort({ fecha: -1, _id: -1 }).lean();
+}
+
 const isPlainObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 
 // Avanza el estado de un pedido al inmediatamente siguiente.

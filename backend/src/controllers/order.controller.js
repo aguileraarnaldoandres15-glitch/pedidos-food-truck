@@ -11,6 +11,11 @@ export async function listPendingOrders(req, res) {
   res.status(200).json({ data: orders });
 }
 
+export async function listOrders(req, res) {
+  const orders = await orderService.listOrders();
+  res.status(200).json({ data: orders });
+}
+
 export async function updateOrderStatus(req, res) {
   const order = await orderService.updateOrderStatus(req.params.id, req.body);
   res.status(200).json({ data: order });

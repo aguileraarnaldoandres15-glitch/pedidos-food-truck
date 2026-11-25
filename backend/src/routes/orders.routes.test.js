@@ -7,7 +7,7 @@ import { calculateTotal } from '../utils/orderTotal.js';
 import { connectMemoryDb, clearMemoryDb, disconnectMemoryDb } from '../../test/memoryDb.js';
 
 // Tests de integración con supertest sobre `app` y una base de datos aislada en memoria.
-// FOOD-04 y FOOD-05 siguen pendientes y se implementan junto con sus endpoints.
+// FOOD-05 sigue pendiente y se implementa junto con el manejo uniforme de errores.
 
 // La primera ejecución puede descargar el binario de MongoDB, por eso el timeout es mayor.
 beforeAll(connectMemoryDb, 120_000);
@@ -39,6 +39,8 @@ const insertOrder = ({ cliente = 'Ana', estado = 'recibido', fecha = new Date() 
 };
 
 const getPending = () => request(app).get('/api/pedidos/pendientes');
+
+const getOrders = () => request(app).get('/api/pedidos');
 
 const patchStatus = (id, body) => request(app).patch(`/api/pedidos/${id}/estado`).send(body);
 
@@ -348,9 +350,56 @@ describe('PATCH /api/pedidos/:id/estado', () => {
 
 describe('GET /api/pedidos', () => {
   describe('FOOD-04 CA1: listado completo', () => {
-    it.todo('devuelve todos los pedidos sin importar su estado (recibido, en preparación, listo y entregado)');
-    it.todo('devuelve los pedidos ordenados por fecha descendente (del más reciente al más antiguo)');
-    it.todo('responde 200 con data: [] cuando no hay pedidos');
+    it('devuelve todos los pedidos sin importar su estado (recibido, en preparación, listo y entregado)', async () => {
+      await insertOrder({ cliente: 'Ana', estado: 'recibido', fecha: new Date('2026-01-01T10:00:00Z') });
+      await insertOrder({ cliente: 'Beto', estado: 'en preparación', fecha: new Date('2026-01-01T10:05:00Z') });
+      await insertOrder({ cliente: 'Caro', estado: 'listo', fecha: new Date('2026-01-01T10:10:00Z') });
+      await insertOrder({ cliente: 'Dani', estado: 'entregado', fecha: new Date('2026-01-01T10:15:00Z') });
+
+      const response = await getOrders();
+
+      expect(response.status).toBe(200);
+      expect(response.headers['content-type']).toMatch(/application\/json/);
+      expect(Object.keys(response.body)).toEqual(['data']);
+      expect(response.body.data).toHaveLength(4);
+      expect(response.body.data.map((order) => order.estado).sort()).toEqual(
+        ['en preparación', 'entregado', 'listo', 'recibido'],
+      );
+      expect(response.body.data.find((order) => order.cliente === 'Dani')).toEqual({
+        _id: expect.any(String),
+        cliente: 'Dani',
+        items: [{ nombre: 'Pancho', cantidad: 2, precioUnitario: 1500 }],
+        total: 3000,
+        estado: 'entregado',
+        fecha: '2026-01-01T10:15:00.000Z',
+      });
+    });
+
+    it('devuelve los pedidos ordenados por fecha descendente (del más reciente al más antiguo)', async () => {
+      // Se insertan desordenados, con un entregado intercalado.
+      await insertOrder({ cliente: 'Segundo', estado: 'listo', fecha: new Date('2026-01-01T12:00:00Z') });
+      await insertOrder({ cliente: 'Cuarto', estado: 'recibido', fecha: new Date('2026-01-01T10:00:00Z') });
+      await insertOrder({ cliente: 'Primero', estado: 'entregado', fecha: new Date('2026-01-01T13:00:00Z') });
+      await insertOrder({ cliente: 'Tercero', estado: 'en preparación', fecha: new Date('2026-01-01T11:30:00Z') });
+
+      const response = await getOrders();
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.map((order) => order.cliente)).toEqual(['Primero', 'Segundo', 'Tercero', 'Cuarto']);
+      expect(response.body.data.map((order) => order.fecha)).toEqual([
+        '2026-01-01T13:00:00.000Z',
+        '2026-01-01T12:00:00.000Z',
+        '2026-01-01T11:30:00.000Z',
+        '2026-01-01T10:00:00.000Z',
+      ]);
+    });
+
+    it('responde 200 con data: [] cuando no hay pedidos', async () => {
+      const response = await getOrders();
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ data: [] });
+    });
   });
 });
 
