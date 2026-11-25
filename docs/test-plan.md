@@ -4,7 +4,7 @@ Casos de prueba derivados de los criterios de aceptación de las historias `FOOD
 
 **Tipos:** U = unitario · I = integración backend · C = componente frontend · M = manual / E2E
 
-**Estado actual:** los casos U están implementados y en verde. Los casos I y C están escritos como `it.todo(...)` y se completan al implementar cada historia.
+**Estado actual:** los casos U están implementados y en verde. Los 8 casos I de `FOOD-01` están implementados y en verde sobre la base de datos en memoria. Los casos I de `FOOD-02` a `FOOD-05` y los casos C siguen escritos como `it.todo(...)` y se completan al implementar cada historia.
 
 ## Decisiones de diseño fijadas por los tests
 
@@ -27,7 +27,7 @@ Casos de prueba derivados de los criterios de aceptación de las historias `FOOD
 | `backend/src/utils/orderValidation.test.js` | U | `validateOrder` |
 | `backend/src/utils/orderTotal.test.js` | U | `calculateTotal` |
 | `backend/src/utils/orderStatus.test.js` | U | `ORDER_STATUSES`, `getNextStatus`, `validateTransition` |
-| `backend/src/routes/orders.routes.test.js` | I (`todo`) | endpoints de pedidos y formato de errores |
+| `backend/src/routes/orders.routes.test.js` | I (`FOOD-01` implementado; `FOOD-02` a `FOOD-05` `todo`) | endpoints de pedidos y formato de errores |
 | `frontend/src/utils/orderFormValidation.test.js` | U | `validateOrderForm` |
 | `frontend/src/components/OrderForm.test.jsx` | C (`todo`) | formulario de pedido |
 | `frontend/src/components/OrderList.test.jsx` | C (`todo`) | detalle, estado y botón avanzar |
@@ -163,6 +163,6 @@ Casos de prueba derivados de los criterios de aceptación de las historias `FOOD
 | CA3 | El formulario bloquea el envío | enviar con cliente vacío o ítem inválido | se muestra el error junto al formulario y **no** se llama `api.createOrder` | C |
 | CA4 | Error de API en el formulario | `createOrder` rechaza `{code, message}` | se muestra `message` | C |
 
-## Pendiente para los tests de integración
+## Base de datos para los tests de integración
 
-`backend/CLAUDE.md` pide una base de datos aislada en memoria. Eso requiere una dependencia nueva (por ejemplo `mongodb-memory-server`), que se consultará antes de instalar al implementar los casos I.
+Los casos I usan una base de datos aislada en memoria con `mongodb-memory-server` (`devDependency` de `backend/`). El helper `backend/test/memoryDb.js` expone `connectMemoryDb`, `clearMemoryDb` y `disconnectMemoryDb`, que cada archivo de integración usa en `beforeAll`, `afterEach` y `afterAll`. La primera ejecución descarga el binario de MongoDB y lo deja en caché.

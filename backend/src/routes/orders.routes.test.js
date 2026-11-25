@@ -1,24 +1,113 @@
-import { describe, it } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach, afterAll } from 'vitest';
+import request from 'supertest';
+import app from '../app.js';
+import { Order } from '../models/order.model.js';
+import { connectMemoryDb, clearMemoryDb, disconnectMemoryDb } from '../../test/memoryDb.js';
 
-// Tests de integración pendientes: se implementan junto con el modelo, el service y las rutas de pedidos.
-// Requieren supertest sobre `app` y una base de datos aislada en memoria.
+// Tests de integración con supertest sobre `app` y una base de datos aislada en memoria.
+// FOOD-02 a FOOD-05 siguen pendientes y se implementan junto con sus endpoints.
+
+// La primera ejecución puede descargar el binario de MongoDB, por eso el timeout es mayor.
+beforeAll(connectMemoryDb, 120_000);
+afterEach(clearMemoryDb);
+afterAll(disconnectMemoryDb);
+
+const validOrder = () => ({
+  cliente: 'Ana',
+  items: [{ nombre: 'Pancho', cantidad: 2, precioUnitario: 1500 }],
+});
+
+const postOrder = (body) => request(app).post('/api/pedidos').send(body);
+
+const expectValidationError = async (body) => {
+  const response = await postOrder(body);
+
+  expect(response.status).toBe(400);
+  expect(response.body).toEqual({
+    error: { code: 'VALIDATION_ERROR', message: expect.any(String) },
+  });
+  expect(response.body.error.message.trim()).not.toBe('');
+  expect(await Order.countDocuments()).toBe(0);
+};
 
 describe('POST /api/pedidos', () => {
   describe('FOOD-01 CA2: total calculado en el backend', () => {
-    it.todo('ignora el total enviado (total: 1) y responde y guarda el total calculado (3000)');
+    it('ignora el total enviado (total: 1) y responde y guarda el total calculado (3000)', async () => {
+      const response = await postOrder({ ...validOrder(), total: 1 });
+
+      expect(response.status).toBe(201);
+      expect(response.body.data.total).toBe(3000);
+
+      const saved = await Order.findById(response.body.data._id).lean();
+      expect(saved.total).toBe(3000);
+    });
   });
 
   describe('FOOD-01 CA3: creación exitosa', () => {
-    it.todo('responde 201 con { data } que incluye _id, cliente, items, total, estado "recibido" y fecha');
-    it.todo('ignora el estado y la fecha enviados y guarda estado "recibido" con la fecha actual');
+    it('responde 201 con { data } que incluye _id, cliente, items, total, estado "recibido" y fecha', async () => {
+      const response = await postOrder(validOrder());
+
+      expect(response.status).toBe(201);
+      expect(response.headers['content-type']).toMatch(/application\/json/);
+      expect(Object.keys(response.body)).toEqual(['data']);
+      expect(response.body.data).toEqual({
+        _id: expect.any(String),
+        cliente: 'Ana',
+        items: [{ nombre: 'Pancho', cantidad: 2, precioUnitario: 1500 }],
+        total: 3000,
+        estado: 'recibido',
+        fecha: expect.any(String),
+      });
+      expect(Number.isNaN(Date.parse(response.body.data.fecha))).toBe(false);
+      expect(await Order.countDocuments()).toBe(1);
+    });
+
+    it('ignora el estado y la fecha enviados y guarda estado "recibido" con la fecha actual', async () => {
+      const before = Date.now();
+      const response = await postOrder({ ...validOrder(), estado: 'entregado', fecha: '2020-01-01' });
+      const after = Date.now();
+
+      expect(response.status).toBe(201);
+      expect(response.body.data.estado).toBe('recibido');
+
+      const saved = await Order.findById(response.body.data._id).lean();
+      expect(saved.estado).toBe('recibido');
+      expect(saved.fecha.getTime()).toBeGreaterThanOrEqual(before);
+      expect(saved.fecha.getTime()).toBeLessThanOrEqual(after);
+    });
   });
 
   describe('FOOD-01 CA4: datos inválidos', () => {
-    it.todo('responde 400 VALIDATION_ERROR cuando falta el cliente y no crea el pedido');
-    it.todo('responde 400 VALIDATION_ERROR cuando el cliente es solo espacios y no crea el pedido');
-    it.todo('responde 400 VALIDATION_ERROR cuando items es un array vacío y no crea el pedido');
-    it.todo('responde 400 VALIDATION_ERROR cuando una cantidad es 0, negativa o decimal y no crea el pedido');
-    it.todo('responde 400 VALIDATION_ERROR cuando un precio unitario es 0 o negativo y no crea el pedido');
+    it('responde 400 VALIDATION_ERROR cuando falta el cliente y no crea el pedido', async () => {
+      const { items } = validOrder();
+      await expectValidationError({ items });
+    });
+
+    it('responde 400 VALIDATION_ERROR cuando el cliente es solo espacios y no crea el pedido', async () => {
+      await expectValidationError({ ...validOrder(), cliente: '   ' });
+    });
+
+    it('responde 400 VALIDATION_ERROR cuando items es un array vacío y no crea el pedido', async () => {
+      await expectValidationError({ ...validOrder(), items: [] });
+    });
+
+    describe('responde 400 VALIDATION_ERROR cuando una cantidad es 0, negativa o decimal y no crea el pedido', () => {
+      it.each([0, -1, 1.5])('cantidad: %s', async (cantidad) => {
+        await expectValidationError({
+          ...validOrder(),
+          items: [{ nombre: 'Pancho', cantidad, precioUnitario: 1500 }],
+        });
+      });
+    });
+
+    describe('responde 400 VALIDATION_ERROR cuando un precio unitario es 0 o negativo y no crea el pedido', () => {
+      it.each([0, -1])('precioUnitario: %s', async (precioUnitario) => {
+        await expectValidationError({
+          ...validOrder(),
+          items: [{ nombre: 'Pancho', cantidad: 2, precioUnitario }],
+        });
+      });
+    });
   });
 });
 
