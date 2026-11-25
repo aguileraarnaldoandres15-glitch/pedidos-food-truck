@@ -5,3 +5,8 @@ export async function createOrder(req, res) {
   const order = await orderService.createOrder(req.body);
   res.status(201).json({ data: order });
 }
+
+export async function listPendingOrders(req, res) {
+  const orders = await orderService.listPendingOrders();
+  res.status(200).json({ data: orders });
+}

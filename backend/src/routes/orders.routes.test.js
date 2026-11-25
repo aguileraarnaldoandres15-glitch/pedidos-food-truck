@@ -2,10 +2,11 @@ import { describe, it, expect, beforeAll, afterEach, afterAll } from 'vitest';
 import request from 'supertest';
 import app from '../app.js';
 import { Order } from '../models/order.model.js';
+import { calculateTotal } from '../utils/orderTotal.js';
 import { connectMemoryDb, clearMemoryDb, disconnectMemoryDb } from '../../test/memoryDb.js';
 
 // Tests de integración con supertest sobre `app` y una base de datos aislada en memoria.
-// FOOD-02 a FOOD-05 siguen pendientes y se implementan junto con sus endpoints.
+// FOOD-03 a FOOD-05 siguen pendientes y se implementan junto con sus endpoints.
 
 // La primera ejecución puede descargar el binario de MongoDB, por eso el timeout es mayor.
 beforeAll(connectMemoryDb, 120_000);
@@ -29,6 +30,14 @@ const expectValidationError = async (body) => {
   expect(response.body.error.message.trim()).not.toBe('');
   expect(await Order.countDocuments()).toBe(0);
 };
+
+// Inserta un pedido directo en la DB para controlar `estado` y `fecha`.
+const insertOrder = ({ cliente = 'Ana', estado = 'recibido', fecha = new Date() } = {}) => {
+  const order = validOrder();
+  return Order.create({ ...order, cliente, total: calculateTotal(order.items), estado, fecha });
+};
+
+const getPending = () => request(app).get('/api/pedidos/pendientes');
 
 describe('POST /api/pedidos', () => {
   describe('FOOD-01 CA2: total calculado en el backend', () => {
@@ -113,16 +122,71 @@ describe('POST /api/pedidos', () => {
 
 describe('GET /api/pedidos/pendientes', () => {
   describe('FOOD-02 CA1: solo pedidos no entregados', () => {
-    it.todo('devuelve los pedidos en recibido, en preparación y listo, excluyendo los entregados');
-    it.todo('responde 200 con data: [] cuando todos los pedidos están entregados');
+    it('devuelve los pedidos en recibido, en preparación y listo, excluyendo los entregados', async () => {
+      await insertOrder({ cliente: 'Ana', estado: 'recibido', fecha: new Date('2026-01-01T10:00:00Z') });
+      await insertOrder({ cliente: 'Beto', estado: 'en preparación', fecha: new Date('2026-01-01T10:05:00Z') });
+      await insertOrder({ cliente: 'Caro', estado: 'listo', fecha: new Date('2026-01-01T10:10:00Z') });
+      await insertOrder({ cliente: 'Dani', estado: 'entregado', fecha: new Date('2026-01-01T10:15:00Z') });
+
+      const response = await getPending();
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toHaveLength(3);
+      expect(response.body.data.map((order) => order.estado)).toEqual(['recibido', 'en preparación', 'listo']);
+      expect(response.body.data.map((order) => order.cliente)).not.toContain('Dani');
+    });
+
+    it('responde 200 con data: [] cuando todos los pedidos están entregados', async () => {
+      await insertOrder({ cliente: 'Ana', estado: 'entregado' });
+      await insertOrder({ cliente: 'Beto', estado: 'entregado' });
+
+      const response = await getPending();
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ data: [] });
+    });
   });
 
   describe('FOOD-02 CA2: orden de llegada', () => {
-    it.todo('devuelve los pedidos ordenados por fecha ascendente (del más antiguo al más nuevo)');
+    it('devuelve los pedidos ordenados por fecha ascendente (del más antiguo al más nuevo)', async () => {
+      // Se insertan desordenados, con un entregado intercalado.
+      await insertOrder({ cliente: 'Tercero', estado: 'listo', fecha: new Date('2026-01-01T12:00:00Z') });
+      await insertOrder({ cliente: 'Primero', estado: 'recibido', fecha: new Date('2026-01-01T10:00:00Z') });
+      await insertOrder({ cliente: 'Entregado', estado: 'entregado', fecha: new Date('2026-01-01T11:00:00Z') });
+      await insertOrder({ cliente: 'Segundo', estado: 'en preparación', fecha: new Date('2026-01-01T11:30:00Z') });
+
+      const response = await getPending();
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.map((order) => order.cliente)).toEqual(['Primero', 'Segundo', 'Tercero']);
+      expect(response.body.data.map((order) => order.fecha)).toEqual([
+        '2026-01-01T10:00:00.000Z',
+        '2026-01-01T11:30:00.000Z',
+        '2026-01-01T12:00:00.000Z',
+      ]);
+    });
   });
 
   describe('FOOD-02 CA3: forma de cada pedido', () => {
-    it.todo('cada pedido incluye cliente, items (nombre y cantidad), total, estado y fecha');
+    it('cada pedido incluye cliente, items (nombre y cantidad), total, estado y fecha', async () => {
+      await insertOrder({ cliente: 'Ana', estado: 'en preparación', fecha: new Date('2026-01-01T10:00:00Z') });
+
+      const response = await getPending();
+
+      expect(response.status).toBe(200);
+      expect(response.headers['content-type']).toMatch(/application\/json/);
+      expect(Object.keys(response.body)).toEqual(['data']);
+      expect(response.body.data).toEqual([
+        {
+          _id: expect.any(String),
+          cliente: 'Ana',
+          items: [{ nombre: 'Pancho', cantidad: 2, precioUnitario: 1500 }],
+          total: 3000,
+          estado: 'en preparación',
+          fecha: '2026-01-01T10:00:00.000Z',
+        },
+      ]);
+    });
   });
 });
 

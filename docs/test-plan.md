@@ -4,7 +4,7 @@ Casos de prueba derivados de los criterios de aceptación de las historias `FOOD
 
 **Tipos:** U = unitario · I = integración backend · C = componente frontend · M = manual / E2E
 
-**Estado actual:** los casos U están implementados y en verde. Los 8 casos I de `FOOD-01` están implementados y en verde sobre la base de datos en memoria. Los casos I de `FOOD-02` a `FOOD-05` y los casos C siguen escritos como `it.todo(...)` y se completan al implementar cada historia.
+**Estado actual:** los casos U están implementados y en verde. Los 8 casos I de `FOOD-01` y los 4 casos I de `FOOD-02` están implementados y en verde sobre la base de datos en memoria. Los casos I de `FOOD-03` a `FOOD-05` y los casos C (incluidos los de `FOOD-02`) siguen escritos como `it.todo(...)` y se completan al implementar cada historia.
 
 ## Decisiones de diseño fijadas por los tests
 
@@ -27,7 +27,7 @@ Casos de prueba derivados de los criterios de aceptación de las historias `FOOD
 | `backend/src/utils/orderValidation.test.js` | U | `validateOrder` |
 | `backend/src/utils/orderTotal.test.js` | U | `calculateTotal` |
 | `backend/src/utils/orderStatus.test.js` | U | `ORDER_STATUSES`, `getNextStatus`, `validateTransition` |
-| `backend/src/routes/orders.routes.test.js` | I (`FOOD-01` implementado; `FOOD-02` a `FOOD-05` `todo`) | endpoints de pedidos y formato de errores |
+| `backend/src/routes/orders.routes.test.js` | I (`FOOD-01` y `FOOD-02` implementados; `FOOD-03` a `FOOD-05` `todo`) | endpoints de pedidos y formato de errores |
 | `frontend/src/utils/orderFormValidation.test.js` | U | `validateOrderForm` |
 | `frontend/src/components/OrderForm.test.jsx` | C (`todo`) | formulario de pedido |
 | `frontend/src/components/OrderList.test.jsx` | C (`todo`) | detalle, estado y botón avanzar |

@@ -1,6 +1,6 @@
 export const ORDER_STATUSES = Object.freeze(['recibido', 'en preparación', 'listo', 'entregado']);
 
-const FINAL_STATUS = ORDER_STATUSES[ORDER_STATUSES.length - 1];
+export const FINAL_STATUS =ORDER_STATUSES[ORDER_STATUSES.length - 1];
 
 export function getNextStatus(currentStatus) {
   const index = ORDER_STATUSES.indexOf(currentStatus);

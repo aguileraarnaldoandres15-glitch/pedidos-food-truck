@@ -1,7 +1,7 @@
 import { Order } from '../models/order.model.js';
 import { validateOrder } from '../utils/orderValidation.js';
 import { calculateTotal } from '../utils/orderTotal.js';
-import { ORDER_STATUSES } from '../utils/orderStatus.js';
+import { ORDER_STATUSES, FINAL_STATUS } from '../utils/orderStatus.js';
 import { AppError } from '../utils/appError.js';
 
 export async function createOrder(input) {
@@ -20,4 +20,12 @@ export async function createOrder(input) {
   });
 
   return order.toJSON();
+}
+
+// Pendientes = todo pedido no entregado, del más antiguo al más nuevo.
+// El `_id` desempata pedidos con la misma fecha para que el orden sea estable.
+export async function listPendingOrders() {
+  return Order.find({ estado: { $ne: FINAL_STATUS } })
+    .sort({ fecha: 1, _id: 1 })
+    .lean();
 }
