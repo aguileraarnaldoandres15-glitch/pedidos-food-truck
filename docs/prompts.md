@@ -134,3 +134,21 @@ feat: implementar backend de FOOD-05 manejo uniforme de errores
 git checkout main
 git merge feature/FOOD-05-manejo-errores
 git push origin main
+
+Prompts 8 Para el Historial:
+## Prompt 8 · Documentación del contrato real de la API (`docs/api.md`)
+**Herramienta:** Claude Code (VS Code)  
+**Rama:** `docs/api-contract`
+
+**Prompt utilizado:**
+> Generar el archivo `docs/api.md` documentando el contrato real completo de la API del proyecto **Pedidos Food Truck**, tomando como única fuente de verdad el código implementado y los tests de integración en verde de `backend/`. [...] Primero mostrame el índice propuesto y confirmame que leíste los endpoints y códigos reales. Esperá mi aprobación antes de crear `docs/api.md`.
+
+**Decisiones aplicadas:**
+- Validé el índice de 9 secciones cubriendo los 5 endpoints reales, el modelo `Pedido`, la máquina de estados, el catálogo cerrado de 5 códigos de error y el orden de validaciones de `PATCH /api/pedidos/:id/estado`.
+- Incluí en "Límites conocidos" el comportamiento ante MongoDB desconectado (aclarando que no está cubierto por tests de integración) y elegí ejemplos con método, ruta y bloques JSON limpios sin `curl`.
+
+Commitee y mergee a main:
+docs: documentar contrato real de la API en docs/api.md
+git checkout main
+git merge docs/api-contract
+git push origin main
