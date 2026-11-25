@@ -10,3 +10,8 @@ export async function listPendingOrders(req, res) {
   const orders = await orderService.listPendingOrders();
   res.status(200).json({ data: orders });
 }
+
+export async function updateOrderStatus(req, res) {
+  const order = await orderService.updateOrderStatus(req.params.id, req.body);
+  res.status(200).json({ data: order });
+}

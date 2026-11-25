@@ -1,12 +1,13 @@
 import { describe, it, expect, beforeAll, afterEach, afterAll } from 'vitest';
 import request from 'supertest';
+import mongoose from 'mongoose';
 import app from '../app.js';
 import { Order } from '../models/order.model.js';
 import { calculateTotal } from '../utils/orderTotal.js';
 import { connectMemoryDb, clearMemoryDb, disconnectMemoryDb } from '../../test/memoryDb.js';
 
 // Tests de integración con supertest sobre `app` y una base de datos aislada en memoria.
-// FOOD-03 a FOOD-05 siguen pendientes y se implementan junto con sus endpoints.
+// FOOD-04 y FOOD-05 siguen pendientes y se implementan junto con sus endpoints.
 
 // La primera ejecución puede descargar el binario de MongoDB, por eso el timeout es mayor.
 beforeAll(connectMemoryDb, 120_000);
@@ -38,6 +39,19 @@ const insertOrder = ({ cliente = 'Ana', estado = 'recibido', fecha = new Date() 
 };
 
 const getPending = () => request(app).get('/api/pedidos/pendientes');
+
+const patchStatus = (id, body) => request(app).patch(`/api/pedidos/${id}/estado`).send(body);
+
+const expectSavedStatus = async (id, estado) => {
+  const saved = await Order.findById(id).lean();
+  expect(saved.estado).toBe(estado);
+};
+
+const expectErrorResponse = (response, status, code) => {
+  expect(response.status).toBe(status);
+  expect(response.body).toEqual({ error: { code, message: expect.any(String) } });
+  expect(response.body.error.message.trim()).not.toBe('');
+};
 
 describe('POST /api/pedidos', () => {
   describe('FOOD-01 CA2: total calculado en el backend', () => {
@@ -192,25 +206,143 @@ describe('GET /api/pedidos/pendientes', () => {
 
 describe('PATCH /api/pedidos/:id/estado', () => {
   describe('FOOD-03 CA1: avance al estado siguiente', () => {
-    it.todo('avanza de recibido a en preparación y responde 200 con el estado actualizado');
-    it.todo('avanza de en preparación a listo y responde 200 con el estado actualizado');
-    it.todo('avanza de listo a entregado y responde 200 con el estado actualizado');
+    const expectAdvance = async (from, to) => {
+      const order = await insertOrder({ estado: from });
+
+      const response = await patchStatus(order._id, { estado: to });
+
+      expect(response.status).toBe(200);
+      expect(response.headers['content-type']).toMatch(/application\/json/);
+      expect(Object.keys(response.body)).toEqual(['data']);
+      expect(response.body.data).toMatchObject({ _id: order._id.toString(), cliente: 'Ana', total: 3000, estado: to });
+      await expectSavedStatus(order._id, to);
+    };
+
+    it('avanza de recibido a en preparación y responde 200 con el estado actualizado', async () => {
+      await expectAdvance('recibido', 'en preparación');
+    });
+
+    it('avanza de en preparación a listo y responde 200 con el estado actualizado', async () => {
+      await expectAdvance('en preparación', 'listo');
+    });
+
+    it('avanza de listo a entregado y responde 200 con el estado actualizado', async () => {
+      await expectAdvance('listo', 'entregado');
+    });
   });
 
   describe('FOOD-03 CA2: no se puede saltear ni retroceder', () => {
-    it.todo('responde 400 INVALID_TRANSITION al saltear de recibido a listo sin modificar el pedido');
-    it.todo('responde 400 INVALID_TRANSITION al retroceder de listo a recibido sin modificar el pedido');
-    it.todo('responde 400 cuando el body no tiene estado o el estado no es válido');
-    it.todo('solo modifica el estado aunque el body incluya total o cliente');
+    it('responde 400 INVALID_TRANSITION al saltear de recibido a listo sin modificar el pedido', async () => {
+      const order = await insertOrder({ estado: 'recibido' });
+
+      const response = await patchStatus(order._id, { estado: 'listo' });
+
+      expectErrorResponse(response, 400, 'INVALID_TRANSITION');
+      expect(response.body.error.message).toMatch(/saltear/);
+      await expectSavedStatus(order._id, 'recibido');
+    });
+
+    it('responde 400 INVALID_TRANSITION al retroceder de listo a recibido sin modificar el pedido', async () => {
+      const order = await insertOrder({ estado: 'listo' });
+
+      const response = await patchStatus(order._id, { estado: 'recibido' });
+
+      expectErrorResponse(response, 400, 'INVALID_TRANSITION');
+      expect(response.body.error.message).toMatch(/retroceder/);
+      await expectSavedStatus(order._id, 'listo');
+    });
+
+    describe('responde 400 cuando el body no tiene estado o el estado no es válido', () => {
+      it.each([
+        ['sin estado', {}, 'VALIDATION_ERROR'],
+        ['estado numérico', { estado: 123 }, 'VALIDATION_ERROR'],
+        ['estado vacío', { estado: '' }, 'VALIDATION_ERROR'],
+        ['estado solo espacios', { estado: '   ' }, 'VALIDATION_ERROR'],
+        ['estado desconocido', { estado: 'cancelado' }, 'INVALID_TRANSITION'],
+      ])('%s → 400 %s', async (_case, body, code) => {
+        const order = await insertOrder({ estado: 'recibido' });
+
+        const response = await patchStatus(order._id, body);
+
+        expectErrorResponse(response, 400, code);
+        await expectSavedStatus(order._id, 'recibido');
+      });
+
+      it('valida el body antes de buscar el pedido: body inválido sobre un id inexistente responde 400 y no 404', async () => {
+        const missingId = new mongoose.Types.ObjectId();
+
+        const response = await patchStatus(missingId, {});
+
+        expectErrorResponse(response, 400, 'VALIDATION_ERROR');
+      });
+    });
+
+    it('normaliza el estado con trim antes de validar la transición', async () => {
+      const order = await insertOrder({ estado: 'recibido' });
+
+      const response = await patchStatus(order._id, { estado: '  en preparación  ' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.estado).toBe('en preparación');
+      await expectSavedStatus(order._id, 'en preparación');
+    });
+
+    it('solo modifica el estado aunque el body incluya total o cliente', async () => {
+      const order = await insertOrder({ estado: 'recibido', fecha: new Date('2026-01-01T10:00:00Z') });
+
+      const response = await patchStatus(order._id, {
+        estado: 'en preparación',
+        total: 1,
+        cliente: 'X',
+        fecha: '2020-01-01',
+        items: [],
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual({
+        _id: order._id.toString(),
+        cliente: 'Ana',
+        items: [{ nombre: 'Pancho', cantidad: 2, precioUnitario: 1500 }],
+        total: 3000,
+        estado: 'en preparación',
+        fecha: '2026-01-01T10:00:00.000Z',
+      });
+
+      const saved = await Order.findById(order._id).lean();
+      expect(saved.cliente).toBe('Ana');
+      expect(saved.total).toBe(3000);
+      expect(saved.items).toEqual([{ nombre: 'Pancho', cantidad: 2, precioUnitario: 1500 }]);
+      expect(saved.fecha.toISOString()).toBe('2026-01-01T10:00:00.000Z');
+      expect(saved.estado).toBe('en preparación');
+    });
   });
 
   describe('FOOD-03 CA3: pedido ya entregado', () => {
-    it.todo('responde 400 informando que el pedido ya fue entregado, sin modificarlo');
+    it('responde 400 informando que el pedido ya fue entregado, sin modificarlo', async () => {
+      const order = await insertOrder({ estado: 'entregado' });
+
+      const response = await patchStatus(order._id, { estado: 'listo' });
+
+      expectErrorResponse(response, 400, 'INVALID_TRANSITION');
+      expect(response.body.error.message).toMatch(/ya fue entregado/);
+      await expectSavedStatus(order._id, 'entregado');
+    });
   });
 
   describe('FOOD-03 CA4: id inexistente o inválido', () => {
-    it.todo('responde 404 NOT_FOUND cuando el id tiene formato válido pero no existe');
-    it.todo('responde 400 INVALID_ID cuando el id tiene formato inválido');
+    it('responde 404 NOT_FOUND cuando el id tiene formato válido pero no existe', async () => {
+      const missingId = new mongoose.Types.ObjectId();
+
+      const response = await patchStatus(missingId, { estado: 'en preparación' });
+
+      expectErrorResponse(response, 404, 'NOT_FOUND');
+    });
+
+    it('responde 400 INVALID_ID cuando el id tiene formato inválido', async () => {
+      const response = await patchStatus('abc', { estado: 'en preparación' });
+
+      expectErrorResponse(response, 400, 'INVALID_ID');
+    });
   });
 });
 
